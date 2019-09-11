@@ -1,4 +1,5 @@
 import { inspect } from 'util';
+import retry from 'async/retry';
 import Promise from 'pinkie';
 import jimp from 'jimp';
 import BaseBackend from './base';
@@ -76,6 +77,22 @@ function requestApi (path, params) {
         });
 }
 
+function requestApiRetry (path, params, callback) {
+    return requestApiBase(path, params)
+        .then(response => {
+            if (response.status) {
+                const error = new Error(ERROR_MESSAGES.REMOTE_API_REQUEST_FAILED({
+                    status:      response.status,
+                    apiResponse: response.value && response.value.message || inspect(response)    
+                }));
+
+                return callback(error, response);
+            }
+
+            return callback(null, response);
+        });
+}
+
 function getCorrectedSize (currentClientAreaSize, currentWindowSize, requestedSize) {
     var horizontalChrome = currentWindowSize.width - currentClientAreaSize.width;
     var verticalChrome   = currentWindowSize.height - currentClientAreaSize.height;
@@ -143,11 +160,34 @@ export default class AutomateBackend extends BaseBackend {
             ...restCapabilities
         };
 
-        this.sessions[id] = await requestApi(BROWSERSTACK_API_PATHS.newSession, {
+        retry({
+            times: 10,
+            interval: function (retryCount) {
+                return 50 * Math.pow(2, retryCount);
+            }
+        }, requestApiRetry(BROWSERSTACK_API_PATHS.newSession, { 
             body: { desiredCapabilities: capabilities },
-
             executeImmediately: true
+        }, 
+        function (err, result) {
+            if (err)
+                console.log(`THIS IS THE ERROR: ${err}`);
+            else 
+                console.log(`THIS IS THE RESULT: ${result}`);
+        }
+        ), function (err, result) {
+            if (err)
+                console.log(`THIS IS THE ERROR: ${err}`);
+            else 
+                console.log(`THIS IS THE RESULT: ${result}`);
         });
+          
+
+        // this.sessions[id] = await requestApi(BROWSERSTACK_API_PATHS.newSession, {
+        //     body: { desiredCapabilities: capabilities },
+
+        //     executeImmediately: true
+        // });
 
         AutomateBackend._ensureSessionId(this.sessions[id]);
 
