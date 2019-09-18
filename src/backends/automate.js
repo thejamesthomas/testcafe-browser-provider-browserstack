@@ -8,6 +8,7 @@ import * as ERROR_MESSAGES from '../templates/error-messages';
 
 
 const API_POLLING_INTERVAL = 80000;
+const RELOAD_POLLING_INTERVAL = 600000;
 
 const BROWSERSTACK_API_PATHS = {
     browserList: {
@@ -156,6 +157,12 @@ export default class AutomateBackend extends BaseBackend {
         var sessionId = this.sessions[id].sessionId;
 
         this.sessions[id].interval = setInterval(() => requestApi(BROWSERSTACK_API_PATHS.getUrl(sessionId), { executeImmediately: true }), API_POLLING_INTERVAL);
+        this.sessions[id].reloadInterval = setInterval(async () => {
+            const currentUrl = await requestApi(BROWSERSTACK_API_PATHS.getUrl(sessionId), { executeImmediately: true });
+
+            requestApi(BROWSERSTACK_API_PATHS.openUrl(sessionId), { body: { url: currentUrl } });
+        }, 
+        RELOAD_POLLING_INTERVAL);
 
         await requestApi(BROWSERSTACK_API_PATHS.openUrl(sessionId), { body: { url: pageUrl } });
     }
@@ -169,6 +176,7 @@ export default class AutomateBackend extends BaseBackend {
         delete this.sessions[id];
             
         clearInterval(session.interval);
+        clearInterval(session.reloadInterval);
 
         await requestApi(BROWSERSTACK_API_PATHS.deleteSession(session.sessionId));
     }
